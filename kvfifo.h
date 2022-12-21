@@ -1,9 +1,4 @@
 
-
-
-
-
-
 #ifndef FIFO_KVFIFO_H
 #define FIFO_KVFIFO_H
 #include <iostream>
@@ -117,12 +112,15 @@ public:
         length++;
 
         //add reference to the value to the pointer and add the pointer to a linked list
+        order_insert(o);
+
+
+    }
+    void order_insert(k_list * o) {
         o->next = order;
         o->prev = order->prev;
         order->prev->next = o;
         order->prev = o;
-
-
     }
 
 
@@ -133,6 +131,7 @@ public:
         K key = order->next->key;
         order_remove(order->next);
         tree.at(key).pop_front();
+        length--;
     }
     void order_remove(k_list * k) {
         k->next->prev = k->prev;
@@ -149,6 +148,7 @@ public:
         auto o = tree.at(key);
         order_remove(o.front());
         o.pop_front();
+        length--;
     }
 
     //- Metoda move_to_back przesuwa elementy o kluczu k na koniec kolejki, zachowując
@@ -156,6 +156,11 @@ public:
     //        elementu o podanym kluczu nie ma w kolejce. Złożoność O(m + log n), gdzie m to
     //        liczba przesuwanych elementów.
     void move_to_back(K const &k) {
+        auto a = tree.at(k);
+        for(k_list * l : a) {
+            order_remove(l);
+            order_insert(l);
+        }
 
     }
 
@@ -170,13 +175,13 @@ public:
 
     }
     std::pair<K const &, V const &> front() const {
-
+        return {order->next->key,  *order->next->value};
     }
     std::pair<K const &, V &> back() {
-
+        return {order->prev->key, order->prev->value};
     }
     std::pair<K const &, V const &> back() const {
-
+        return {order->prev->key, &*order->prev->value};
     }
 
     //- Metody first i last zwracają odpowiednio pierwszą i ostatnią parę
@@ -185,16 +190,20 @@ public:
     //Złożoność O(log n).
 
     std::pair<K const &, V &> first(K const &key) {
-
+        k_list * a = tree.at(key).front();
+        return {a->key, a->value};
     }
     std::pair<K const &, V const &> first(K const &key) const {
-
+        k_list * a = tree.at(key).front();
+        return {a->key, *a->value};
     }
     std::pair<K const &, V &> last(K const &key) {
-
+        k_list * a = tree.at(key).back();
+        return {a->key, a->value};
     }
     std::pair<K const &, V const &> last(K const &key) const {
-
+        k_list * a = tree.at(key).back();
+        return {a->key, *a->value};
     }
     //
     //- Metoda size zwraca liczbę elementów w kolejce. Złożoność O(1).
@@ -216,9 +225,22 @@ public:
     }
 
     //- Metoda clear usuwa wszystkie elementy z kolejki. Złożoność O(n).
-    void clear();
+    void clear() {
+        for (auto  l : tree) {
+            for(auto o : l) {
+                order_remove(o);
+            }
+        }
+        tree.clear();
+        length = 0;
+    }
 
-
+    void print_queue() {
+        while(!empty()) {
+            std::cout << "key=" << front().first << " val=" << front().second << std::endl;
+            pop();
+        }
+    }
 
 
     //- Iterator k_iterator oraz metody k_begin i k_end, pozwalające przeglądać zbiór
@@ -229,6 +251,9 @@ public:
     //        całej kolejki w czasie O(n). Iterator służy jedynie do przeglądania kolejki
     //i za jego pomocą nie można modyfikować kolejki, więc zachowuje się jak
     //        const_iterator z biblioteki standardowej.
+
+
+
     //
     //Tam gdzie jest to możliwe i uzasadnione należy opatrzyć metody kwalifikatorami
     //const i noexcept.
@@ -240,20 +265,8 @@ public:
     //unieważniać iteratorów.
 
 };
-//
-//int main() {
-//    kvfifo<int, int> kvf1;
-//    kvf1.push(1, 1);
-//    kvf1.push(10, 2);
-//    kvf1.push(100, 3);
-//    kvf1.pop(100);
-//    kvf1.pop();
-////    auto b = kvf1.front();
-////    b.second = 3;
-//    auto a = kvf1.front();
-//    std::cout << a.first <<" " << a.second << std::endl;
-//
-//}
+
+
 
 
 #endif //FIFO_KVFIFO_H
