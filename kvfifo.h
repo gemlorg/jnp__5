@@ -1,76 +1,259 @@
+
+
+
+
+
+
+#ifndef FIFO_KVFIFO_H
+#define FIFO_KVFIFO_H
+#include <iostream>
+#include <map>
+#include <list>
+
+
+
+//Celem tego zadania jest zaimplementowanie wzorca kontenera zachowującego
+//się jak kolejka fifo, w której każdy element ma przyporządkowany klucz.
+//Kontener ten powinien zapewniać silne gwarancje odporności na wyjątki oraz
+//realizować semantykę kopiowania przy modyfikowaniu (ang. copy on write).
+
+
+
+//Kopiowanie przy zapisie to technika optymalizacji szeroko stosowana
+//m.in. w strukturach danych z biblioteki Qt oraz dawniej w implementacjach
+//std::string. Podstawowa jej idea jest taka, że gdy tworzymy kopię obiektu
+//(w C++ za pomocą konstruktora kopiującego lub operator przypisania), to
+//        współdzieli ona wszystkie wewnętrzne zasoby (które mogą być przechowywane
+//                                                     w oddzielnym obiekcie na stercie) z obiektem źródłowym. Taki stan trwa do
+//momentu, w którym jedna z kopii musi zostać zmodyfikowana. Wtedy modyfikowany
+//obiekt tworzy własną kopię owych zasobów, na których wykonuje modyfikacje.
 //
-//#ifndef FIFO_KVFIFO_H
-//#define FIFO_KVFIFO_H
+//Wzorzec ma być parametryzowany typami klucza i przechowywanej wartości,
+//oznaczanymi odpowiednio przez K i V. Typ klucza K ma semantykę wartości, czyli
+//dostępne są dla niego bezparametrowy konstruktor domyślny, konstruktor
+//        kopiujący, konstruktor przenoszący i operatory przypisania. Na typie K
+//        zdefiniowany jest porządek liniowy i można na obiektach tego typu wykonywać
+//wszelkie porównania. O typie V można jedynie założyć, że ma konstruktor
+//kopiujący.
 //
+//W ramach tego zadania należy zaimplementować szablon
 //
-//
-//#endif //FIFO_KVFIFO_H
-//
-//
-//#include "kvfifo.h"
-//#include <cassert>
-//#include <memory>
-//#include <vector>
-//
-//auto f(kvfifo<int, int> q) {
-//    return q;
-//}
+
+template <typename K, typename V> class kvfifo {
+
+    class k_list {
+    public:
+        k_list * prev;
+        k_list * next;
+        const K key;
+        V value;
+        k_list(K key, V value) : key(key), value(value) {
+            prev = this;
+            next = this;
+        }
+    };
+    using dict = std::map<K, std::list<k_list *>>;
+
+public:
+    //length of a queue
+    uint64_t length;
+
+    //pointer to the root of a linked list(allows to save the order of the queue + quick access to the first/last elem.
+    k_list * order;
+
+    //a key-value map. for each key we save all values assigned to this key in a list.
+    //this allows quick search for elements by the key.
+    dict tree;
+
+
+    //Klasa kvfifo powinna udostępniać niżej opisane operacje. Przy każdej operacji
+    //        podana jest jej oczekiwana złożoność czasowa przy założeniu, że nie trzeba
+    //        wykonywać kopii. Oczekiwana złożoność czasowa operacji kopiowania przy zapisie
+    //        wynosi O(n log n), gdzie n oznacza liczbę elementów przechowywanych w kolejce.
+    //Wszystkie operacje muszą zapewniać co najmniej silną odporność na wyjątki,
+    //        a konstruktor przenoszący i destruktor muszą być no-throw.
+
+
+    //- Konstruktory: bezparametrowy tworzący pustą kolejkę, kopiujący i przenoszący.
+    //Złożoność O(1).
+
+    kvfifo() {
+        length = 0;
+        V v;
+        K k;
+        order = new k_list(v, k);
+    }
+
+    kvfifo(kvfifo const &) {
+
+    }
+
+    kvfifo(kvfifo &&) {
+
+    }
+
+
+    //- Operator przypisania przyjmujący argument przez wartość. Złożoność O(1) plus
+    //        czas niszczenia nadpisywanego obiektu.
+    kvfifo& operator=(kvfifo other) {
+
+    }
+
+
+    //- Metoda push wstawia wartość v na koniec kolejki, nadając jej klucz k.
+    //Złożoność O(log n).
+
+    void push(K const &k, V const &v) {
+        //create a pointer
+        k_list * o = new k_list(k, v);
+
+        //map pointer+value to the key
+        if(tree.find(k) != tree.end()) {
+            tree.at(k).push_back(o);
+        } else {
+            tree.insert({k, {o}});
+        }
+//        std::cout << tree.at(k).back().first << std::endl;
+        length++;
+
+        //add reference to the value to the pointer and add the pointer to a linked list
+        o->next = order;
+        o->prev = order->prev;
+        order->prev->next = o;
+        order->prev = o;
+
+
+    }
+
+
+
+    //- Metoda pop() usuwa pierwszy element z kolejki. Jeśli kolejka jest pusta, to
+    //podnosi wyjątek std::invalid_argument. Złożoność O(log n).
+    void pop() {
+        K key = order->next->key;
+        order_remove(order->next);
+        tree.at(key).pop_front();
+    }
+    void order_remove(k_list * k) {
+        k->next->prev = k->prev;
+        k->prev->next = k->next;
+        free(k);
+    }
+
+
+    //- Metoda pop(k) usuwa pierwszy element o podanym kluczu z kolejki. Jeśli
+    //        podanego klucza nie ma w kolejce, to podnosi wyjątek std::invalid_argument.
+    //Złożoność O(log n).
+
+    void pop(K const & key) {
+        auto o = tree.at(key);
+        order_remove(o.front());
+        o.pop_front();
+    }
+
+    //- Metoda move_to_back przesuwa elementy o kluczu k na koniec kolejki, zachowując
+    //ich kolejność względem siebie. Zgłasza wyjątek std::invalid_argument, gdy
+    //        elementu o podanym kluczu nie ma w kolejce. Złożoność O(m + log n), gdzie m to
+    //        liczba przesuwanych elementów.
+    void move_to_back(K const &k) {
+
+    }
+
+    //- Metody front i back zwracają parę referencji do klucza i wartości znajdującej
+    //się odpowiednio na początku i końcu kolejki. W wersji nie-const zwrócona para
+    //powinna umożliwiać modyfikowanie wartości, ale nie klucza. Dowolna operacja
+    //modyfikująca kolejkę może unieważnić zwrócone referencje. Jeśli kolejka jest
+    //        pusta, to podnosi wyjątek std::invalid_argument. Złożoność O(1).
+
+    std::pair<K const &, V &> front() {
+        return {order->next->key,  order->next->value};
+
+    }
+    std::pair<K const &, V const &> front() const {
+
+    }
+    std::pair<K const &, V &> back() {
+
+    }
+    std::pair<K const &, V const &> back() const {
+
+    }
+
+    //- Metody first i last zwracają odpowiednio pierwszą i ostatnią parę
+    //klucz-wartość o danym kluczu, podobnie jak front i back. Jeśli podanego klucza
+    //        nie ma w kolejce, to podnosi wyjątek std::invalid_argument.
+    //Złożoność O(log n).
+
+    std::pair<K const &, V &> first(K const &key) {
+
+    }
+    std::pair<K const &, V const &> first(K const &key) const {
+
+    }
+    std::pair<K const &, V &> last(K const &key) {
+
+    }
+    std::pair<K const &, V const &> last(K const &key) const {
+
+    }
+    //
+    //- Metoda size zwraca liczbę elementów w kolejce. Złożoność O(1).
+    size_t size() const {
+        return length;
+    }
+
+    //- Metoda empty zwraca true, gdy kolejka jest pusta, a false w przeciwnym
+    //przypadku. Złożoność O(1).
+    bool empty() const {
+        return this->size() == 0;
+    }
+
+    //- Metoda count zwraca liczbę elementów w kolejce o podanym kluczu.
+    //Złożoność O(log n).
+    size_t count(K const & key) const {
+        //check if element is in the tree.
+        return tree.at(key).size();
+    }
+
+    //- Metoda clear usuwa wszystkie elementy z kolejki. Złożoność O(n).
+    void clear();
+
+
+
+
+    //- Iterator k_iterator oraz metody k_begin i k_end, pozwalające przeglądać zbiór
+    //        kluczy w rosnącej kolejności ich wartości. Iteratory mogą być unieważnione przez
+    //        dowolną zakończoną powodzeniem operację modyfikującą kolejkę oraz operacje
+    //        front, back, first i last w wersjach bez const. Iterator musi spełniać koncept
+    //std::bidirectional_iterator. Wszelkie operacje w czasie O(log n). Przeglądanie
+    //        całej kolejki w czasie O(n). Iterator służy jedynie do przeglądania kolejki
+    //i za jego pomocą nie można modyfikować kolejki, więc zachowuje się jak
+    //        const_iterator z biblioteki standardowej.
+    //
+    //Tam gdzie jest to możliwe i uzasadnione należy opatrzyć metody kwalifikatorami
+    //const i noexcept.
+    //
+    //Klasa kvfifo powinna być przezroczysta na wyjątki, czyli powinna przepuszczać
+    //        wszelkie wyjątki zgłaszane przez wywoływane przez nią funkcje i przez operacje
+    //na jej składowych, a obserwowalny stan obiektów nie powinien się zmienić.
+    //W szczególności operacje modyfikujące zakończone niepowodzeniem nie powinny
+    //unieważniać iteratorów.
+
+};
 //
 //int main() {
-//    int keys[] = {3, 1, 2};
+//    kvfifo<int, int> kvf1;
+//    kvf1.push(1, 1);
+//    kvf1.push(10, 2);
+//    kvf1.push(100, 3);
+//    kvf1.pop(100);
+//    kvf1.pop();
+////    auto b = kvf1.front();
+////    b.second = 3;
+//    auto a = kvf1.front();
+//    std::cout << a.first <<" " << a.second << std::endl;
 //
-//    kvfifo<int, int> kvf1 = f({});
-//
-//    for (int i = 0; i < 3; ++i)
-//        kvf1.push(keys[i], i);
-//
-//    auto &ref = kvf1.front().second;
-//
-//    kvfifo<int, int> kvf2(kvf1); // Wykonuje siÄ peĹna kopia, dlaczego?
-//    kvfifo<int, int> kvf3;
-//    kvf3 = kvf2;
-//
-//    ref = 10;
-//    assert(kvf1.front().second == 10);
-//    assert(kvf2.front().second != 10);
-//
-//    kvf2.pop(); // Obiekt kvf2 dokonuje kopii i przestaje wspĂłĹdzieliÄ dane z kvf3.
-//    assert(kvf2.size() == 2);
-//    assert(kvf2.count(3) == 0);
-//    assert(kvf2.count(2) == 1);
-//
-//    assert(kvf3.size() == 3);
-//    assert(kvf3.count(3) == 1);
-//
-//    kvf2.push(1, 3);
-//    kvf2.move_to_back(1);
-//    assert(kvf2.size() == 3);
-//    assert(kvf2.front().second == 2 &&
-//           kvf2.first(1).second == 1 &&
-//           kvf2.last(1).second == 3 &&
-//           kvf2.back().second == 3);
-//
-//    kvfifo<int, int> const kvf4 = kvf2;
-//    assert(kvf4.front().second == 2 &&
-//           kvf4.first(1).second == 1 &&
-//           kvf4.last(1).second == 3 &&
-//           kvf4.back().second == 3);
-//
-//    int i = 1;
-//    for (auto k_it = kvf1.k_begin(), k_end = kvf1.k_end(); k_it != k_end; ++k_it, ++i)
-//        assert(i <= 3 && *k_it == i);
-//
-//    auto kvf5 = std::make_unique<kvfifo<int, int>>();
-//    kvf5->push(4, 0);
-//    assert(kvf5->front().first == 4 && kvf5->front().second == 0);
-//    auto kvf6(*kvf5);
-//    kvf5.reset();
-//    assert(kvf6.front().first == 4 && kvf6.front().second == 0);
-//
-//    std::swap(kvf1, kvf2);
-//    std::vector<kvfifo<int, int>> vec;
-//    for (int i = 0; i < 100000; i++)
-//        kvf1.push(i, i);
-//    for (int i = 0; i < 1000000; i++)
-//        vec.push_back(kvf1);  // Wszystkie obiekty w vec wspĂłĹdzielÄ dane.
 //}
+
+
+#endif //FIFO_KVFIFO_H
