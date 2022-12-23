@@ -1,11 +1,9 @@
-
-
 #ifndef FIFO_KVFIFO_H
 #define FIFO_KVFIFO_H
 #include <iostream>
 #include <map>
 #include <list>
-
+#include <memory>
 
 
 //Celem tego zadania jest zaimplementowanie wzorca kontenera zachowującego
@@ -20,7 +18,7 @@
 //std::string. Podstawowa jej idea jest taka, że gdy tworzymy kopię obiektu
 //(w C++ za pomocą konstruktora kopiującego lub operator przypisania), to
 //        współdzieli ona wszystkie wewnętrzne zasoby (które mogą być przechowywane
-//                                                     w oddzielnym obiekcie na stercie) z obiektem źródłowym. Taki stan trwa do
+//        w oddzielnym obiekcie na stercie) z obiektem źródłowym. Taki stan trwa do
 //momentu, w którym jedna z kopii musi zostać zmodyfikowana. Wtedy modyfikowany
 //obiekt tworzy własną kopię owych zasobów, na których wykonuje modyfikacje.
 //
@@ -140,17 +138,23 @@ public:
         //create a pointer
         k_node * o = new k_node(k, v);
 
-        //map pointer+value to the key
-        if(tree->find(k) != tree->end()) {
-            tree->at(k).push_back(o);
-        } else {
-            tree->insert({k, {o}});
+        try{
+            //map pointer+value to the key
+            if(tree->find(k) != tree->end()) {
+                tree->at(k).push_back(o);
+            } else {
+                tree->insert({k, {o}});
+            }
+
+            length++;
+
+            //add reference to the value to the pointer and add the pointer to a linked list
+            order_insert(o);
+        }
+        catch(...){
+            throw;
         }
 
-        length++;
-
-        //add reference to the value to the pointer and add the pointer to a linked list
-        order_insert(o);
 
 
     }
@@ -197,13 +201,22 @@ public:
         can_be_modified = false;
         copy_on_write();
         K key = (*order)->next->key;
-        order_remove((*order)->next);
-        if(tree->at(key).size() > 1) {
-            tree->at(key).pop_front();
-        } else {
-            tree->erase(key);
+
+        try{
+            if(empty())
+                throw std::invalid_argument("kvfifo is empty");
+            order_remove((*order)->next);
+            if(tree->at(key).size() > 1) {
+                tree->at(key).pop_front();
+            } else {
+                tree->erase(key);
+            }
+            length--;
         }
-        length--;
+        catch(...){
+            throw;
+        }
+
     }
     void order_remove(k_node * k) {
         k->next->prev = k->prev;
@@ -224,15 +237,22 @@ public:
     void pop(K const & key) {
         can_be_modified = false;
         copy_on_write();
-        order_remove(tree->at(key).front());
-        if(tree->at(key).size() > 1) {
-            tree->at(key).pop_front();
-        } else {
-            tree->erase(key);
+
+        try{
+            if(tree->find(key) == tree->end())
+                throw std::invalid_argument("key k is not present");
+            order_remove(tree->at(key).front());
+            if(tree->at(key).size() > 1) {
+                tree->at(key).pop_front();
+            } else {
+                tree->erase(key);
+            }
+
+            length--;
         }
-
-
-        length--;
+        catch(...){
+            throw;
+        }
     }
 
 
@@ -244,12 +264,20 @@ public:
     void move_to_back(K const &k) {
         can_be_modified = false;
         copy_on_write();
-        auto o = tree->at(k);
-        for(k_node * l : o) {
-            order_temp_remove(l);
+
+        try{
+            if(tree->find(k) == tree->end())
+                throw std::invalid_argument("key k is not present");
+            auto o = tree->at(k);
+            for(k_node * l : o) {
+                order_temp_remove(l);
+            }
+            for(k_node * l : o) {
+                order_insert(l);
+            }
         }
-        for(k_node * l : o) {
-            order_insert(l);
+        catch(...){
+            throw;
         }
 
     }
@@ -261,20 +289,28 @@ public:
     //        pusta, to podnosi wyjątek std::invalid_argument. Złożoność O(1).
 
     std::pair<K const &, V &> front() {
+        if(empty())
+            throw std::invalid_argument("kvfifo is empty");
         copy_on_write();
         can_be_modified = true;
         return {(*order)->next->key,  (*order)->next->value};
 
     }
     std::pair<K const &, V const &> front() const {
-        return {(*order)->next->key, (*order)->next->value};
+      if(empty())
+        throw std::invalid_argument("kvfifo is empty");
+      return {(*order)->next->key, (*order)->next->value};
     }
     std::pair<K const &, V &> back() {
+        if(empty())
+            throw std::invalid_argument("kvfifo is empty");
         copy_on_write();
         can_be_modified = true;
         return {(*order)->prev->key, (*order)->prev->value};
     }
     std::pair<K const &, V const &> back() const {
+      if(empty())
+          throw std::invalid_argument("kvfifo is empty");
         return {(*order)->prev->key, (*order)->prev->value};
     }
 
@@ -285,40 +321,57 @@ public:
 
     std::pair<K const &, V &> first(K const &key) {
         copy_on_write();
-        can_be_modified = true;
-        k_node * a = tree->at(key).front();
-
-        return {a->key, a->value};
+        try{
+            if(tree->find(key) == tree->end())
+                throw std::invalid_argument("key k is not present");
+            k_node * a = tree->at(key).front();
+            can_be_modified = true;
+            return {a->key, a->value};
+        }
+        catch(...){
+          throw;
+        }
     }
     std::pair<K const &, V const &> first(K const &key) const {
+        if(tree->find(key) == tree->end())
+            throw std::invalid_argument("key k is not present");
         k_node * a = tree->at(key).front();
         return {a->key, a->value};
     }
     std::pair<K const &, V &> last(K const &key) {
         copy_on_write();
-        can_be_modified = true;
-        k_node * a = tree->at(key).back();
-        return {a->key, a->value};
+        try{
+            if(tree->find(key) == tree->end())
+                throw std::invalid_argument("key k is not present");
+            k_node * a = tree->at(key).back();
+            can_be_modified = true;
+            return {a->key, a->value};
+        }
+        catch(...){
+          throw;
+        }
     }
     std::pair<K const &, V const &> last(K const &key) const {
+        if(tree->find(key) == tree->end())
+            throw std::invalid_argument("key k is not present");
         k_node * a = tree->at(key).back();
         return {a->key, a->value};
     }
     //
     //- Metoda size zwraca liczbę elementów w kolejce. Złożoność O(1).
-    size_t size() const {
+    size_t size() const noexcept {
         return length;
     }
 
     //- Metoda empty zwraca true, gdy kolejka jest pusta, a false w przeciwnym
     //przypadku. Złożoność O(1).
-    bool empty() const {
+    bool empty() const noexcept {
         return length == 0;
     }
 
     //- Metoda count zwraca liczbę elementów w kolejce o podanym kluczu.
     //Złożoność O(log n).
-    size_t count(K const & key) const {
+    size_t count(K const & key) const noexcept {
         //check if element is in the tree.
         if(tree->find(key) == tree->end()) {
             return 0;
@@ -327,7 +380,7 @@ public:
     }
 
     //- Metoda clear usuwa wszystkie elementy z kolejki. Złożoność O(n).
-    void clear() {
+    void clear() noexcept {
         for (auto  l : *tree) {
             for(auto o : l) {
                 order_remove(o);
