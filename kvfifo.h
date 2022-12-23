@@ -1,4 +1,5 @@
 
+
 #ifndef FIFO_KVFIFO_H
 #define FIFO_KVFIFO_H
 #include <iostream>
@@ -47,9 +48,8 @@ template <typename K, typename V> class kvfifo {
             next = this;
         }
     };
+private:
     using dict = std::map<K, std::list<k_list *>>;
-
-public:
     //length of a queue
     uint64_t length;
 
@@ -60,6 +60,7 @@ public:
     //this allows quick search for elements by the key.
     dict tree;
 
+public:
 
     //Klasa kvfifo powinna udostępniać niżej opisane operacje. Przy każdej operacji
     //        podana jest jej oczekiwana złożoność czasowa przy założeniu, że nie trzeba
@@ -175,13 +176,13 @@ public:
 
     }
     std::pair<K const &, V const &> front() const {
-        return {order->next->key,  *order->next->value};
+        return {order->next->key, order->next->value};
     }
     std::pair<K const &, V &> back() {
         return {order->prev->key, order->prev->value};
     }
     std::pair<K const &, V const &> back() const {
-        return {order->prev->key, &*order->prev->value};
+        return {order->prev->key, order->prev->value};
     }
 
     //- Metody first i last zwracają odpowiednio pierwszą i ostatnią parę
@@ -195,7 +196,7 @@ public:
     }
     std::pair<K const &, V const &> first(K const &key) const {
         k_list * a = tree.at(key).front();
-        return {a->key, *a->value};
+        return {a->key, a->value};
     }
     std::pair<K const &, V &> last(K const &key) {
         k_list * a = tree.at(key).back();
@@ -203,7 +204,7 @@ public:
     }
     std::pair<K const &, V const &> last(K const &key) const {
         k_list * a = tree.at(key).back();
-        return {a->key, *a->value};
+        return {a->key, a->value};
     }
     //
     //- Metoda size zwraca liczbę elementów w kolejce. Złożoność O(1).
@@ -252,7 +253,67 @@ public:
     //i za jego pomocą nie można modyfikować kolejki, więc zachowuje się jak
     //        const_iterator z biblioteki standardowej.
 
+    class k_iterator {
+    private:
+      typename dict::const_iterator key_iterator;
+      //k_iterator_t key_iterator;
 
+    public:
+      using iterator_category = std::bidirectional_iterator_tag;;
+      using value_type = K;
+    	using difference_type = ptrdiff_t;
+    	using pointer = value_type*;
+   	  using reference = const value_type&;
+
+      k_iterator() = default;
+
+      k_iterator(typename dict::const_iterator key_iterator_) : key_iterator(key_iterator_){};
+
+      reference operator*() const noexcept {
+        return (*key_iterator).first;
+      }
+      pointer operator->() const noexcept {
+      	return *(*key_iterator).first;
+   	  }
+    	k_iterator & operator++() noexcept {  // ++it
+      	key_iterator++;
+        return *this;
+   	  }
+      k_iterator operator++(int) noexcept { // it++
+        k_iterator result(*this);
+        operator++();
+      	return result;
+   	  }
+   	  k_iterator & operator--() noexcept {  // --it
+      	key_iterator--;
+        return *this;
+   	  }
+      k_iterator operator--(int) noexcept { // it--
+        k_iterator result(*this);
+        operator--();
+      	return result;
+   	  }
+
+    	friend bool operator==(k_iterator const & a,
+                             k_iterator const & b
+      ) noexcept {
+        return a.key_iterator == b.key_iterator;
+      }
+      friend bool operator!=(k_iterator const & a,
+                             k_iterator const & b
+      ) noexcept {
+      	return !(a == b);
+      }
+
+    };
+
+    k_iterator k_begin() const noexcept {
+        return k_iterator(tree.begin());
+    }
+
+    k_iterator k_end() const noexcept {
+        return k_iterator(tree.end());
+    }
 
     //
     //Tam gdzie jest to możliwe i uzasadnione należy opatrzyć metody kwalifikatorami
