@@ -37,28 +37,29 @@
 
 template <typename K, typename V> class kvfifo {
 
-    class k_list {
+    class k_node {
     public:
-        k_list * prev;
-        k_list * next;
+        k_node * prev;
+        k_node * next;
         const K key;
         V value;
-        k_list(K key, V value) : key(key), value(value) {
+        k_node(K key, V value) : key(key), value(value) {
             prev = this;
             next = this;
         }
     };
 private:
-    using dict = std::map<K, std::list<k_list *>>;
+    using dict = std::map<K, std::list< k_node * >>;
     //length of a queue
     uint64_t length;
 
     //pointer to the root of a linked list(allows to save the order of the queue + quick access to the first/last elem.
-    k_list * order;
+    std::shared_ptr<k_node *>  order;
 
     //a key-value map. for each key we save all values assigned to this key in a list.
     //this allows quick search for elements by the key.
-    dict tree;
+    std::shared_ptr<dict> tree;
+    bool can_be_modified;
 
 public:
 
@@ -77,22 +78,58 @@ public:
         length = 0;
         V v;
         K k;
-        order = new k_list(v, k);
+        k_node * p = new k_node(v, k);
+        order = std::make_shared<k_node *>(p);
+        tree = std::make_shared<dict>(dict{});
     }
 
-    kvfifo(kvfifo const &) {
-
+    kvfifo(kvfifo const & other) {
+        length = other.length;
+        tree = other.tree;
+        order = other.order;
+        if(other.can_be_modified) {
+            full_copy();
+        }
     }
 
-    kvfifo(kvfifo &&) {
-
+    kvfifo(kvfifo && other) noexcept {
+        length = other.length;
+        tree = other.tree;
+        order = other.order;
+        other.length = 0;
+        other.tree = nullptr;
+        other.order = nullptr;
     }
 
 
     //- Operator przypisania przyjmujący argument przez wartość. Złożoność O(1) plus
     //        czas niszczenia nadpisywanego obiektu.
-    kvfifo& operator=(kvfifo other) {
+    kvfifo& operator=( kvfifo other) {
+        std::cout << "other is: " << other.length;
+        if(this != &other) {
 
+            struct k_node* head = (*order)->next;
+            struct k_node* tmp ;
+            while (length > 0) {
+                tmp = head;
+                head = head->next;
+                length--;
+                delete tmp;
+            }
+            delete head;
+//            std::cout << other.size();
+            length = other.size();
+            tree = other.tree;
+            order = other.order;
+            if(other.can_be_modified) {
+                full_copy();
+            }
+
+        }
+        return *this;
+    }
+    V& operator=( V  other) {
+        copy_on_write();
     }
 
 
@@ -100,16 +137,19 @@ public:
     //Złożoność O(log n).
 
     void push(K const &k, V const &v) {
+        can_be_modified = false;
+        copy_on_write();
         //create a pointer
-        k_list * o = new k_list(k, v);
+        k_node * o = new k_node(k, v);
 
         //map pointer+value to the key
-        if(tree.find(k) != tree.end()) {
-            tree.at(k).push_back(o);
+        if(tree->find(k) != tree->end()) {
+            tree->at(k).push_back(o);
         } else {
-            tree.insert({k, {o}});
+            tree->insert({k, {o}});
         }
-//        std::cout << tree.at(k).back().first << std::endl;
+//        std::cout << tree->at(k).back()->value << std::endl;
+
         length++;
 
         //add reference to the value to the pointer and add the pointer to a linked list
@@ -117,11 +157,39 @@ public:
 
 
     }
-    void order_insert(k_list * o) {
-        o->next = order;
-        o->prev = order->prev;
-        order->prev->next = o;
-        order->prev = o;
+    void copy_on_write() {
+        if(tree.use_count() > 1) {
+            full_copy();
+        }
+    }
+    void full_copy() {
+        dict a{};
+
+        k_node * root = new k_node((*order)->key, (*order)->value);
+        k_node * tmp = (*order)->next;
+        while(tmp != *order) {
+            k_node * o = new k_node(tmp->key, tmp->value);
+            if(a.find(tmp->key) != a.end()) {
+                a.at(tmp->key).push_back(o);
+            } else {
+                a.insert({tmp->key, {o}});
+            }
+            o->next = root;
+            o->prev = root->prev;
+            root->prev->next = o;
+            root->prev = o;
+            tmp = tmp->next;
+        }
+        tree = std::make_shared<dict>(a);
+        order = std::make_shared<k_node * >(root);
+
+
+    }
+    void order_insert(k_node * o) {
+        o->next = *order;
+        o->prev = (*order)->prev;
+        (*order)->prev->next = o;
+        (*order)->prev = o;
     }
 
 
@@ -129,16 +197,27 @@ public:
     //- Metoda pop() usuwa pierwszy element z kolejki. Jeśli kolejka jest pusta, to
     //podnosi wyjątek std::invalid_argument. Złożoność O(log n).
     void pop() {
-        K key = order->next->key;
-        order_remove(order->next);
-        tree.at(key).pop_front();
+        can_be_modified = false;
+        copy_on_write();
+        K key = (*order)->next->key;
+        order_remove((*order)->next);
+        if(tree->at(key).size() > 1) {
+            tree->at(key).pop_front();
+        } else {
+            tree->erase(key);
+        }
         length--;
     }
-    void order_remove(k_list * k) {
+    void order_remove(k_node * k) {
         k->next->prev = k->prev;
         k->prev->next = k->next;
         free(k);
     }
+    void order_temp_remove(k_node * k) {
+        k->prev->next = k->next;
+        k->next->prev = k->prev;
+    }
+
 
 
     //- Metoda pop(k) usuwa pierwszy element o podanym kluczu z kolejki. Jeśli
@@ -146,20 +225,33 @@ public:
     //Złożoność O(log n).
 
     void pop(K const & key) {
-        auto o = tree.at(key);
-        order_remove(o.front());
-        o.pop_front();
+        can_be_modified = false;
+        copy_on_write();
+        order_remove(tree->at(key).front());
+        if(tree->at(key).size() > 1) {
+            tree->at(key).pop_front();
+        } else {
+            tree->erase(key);
+        }
+
+
         length--;
     }
+
+
 
     //- Metoda move_to_back przesuwa elementy o kluczu k na koniec kolejki, zachowując
     //ich kolejność względem siebie. Zgłasza wyjątek std::invalid_argument, gdy
     //        elementu o podanym kluczu nie ma w kolejce. Złożoność O(m + log n), gdzie m to
     //        liczba przesuwanych elementów.
     void move_to_back(K const &k) {
-        auto a = tree.at(k);
-        for(k_list * l : a) {
-            order_remove(l);
+        can_be_modified = false;
+        copy_on_write();
+        auto o = tree->at(k);
+        for(k_node * l : o) {
+            order_temp_remove(l);
+        }
+        for(k_node * l : o) {
             order_insert(l);
         }
 
@@ -172,17 +264,21 @@ public:
     //        pusta, to podnosi wyjątek std::invalid_argument. Złożoność O(1).
 
     std::pair<K const &, V &> front() {
-        return {order->next->key,  order->next->value};
+        copy_on_write();
+        can_be_modified = true;
+        return {(*order)->next->key,  (*order)->next->value};
 
     }
     std::pair<K const &, V const &> front() const {
-        return {order->next->key, order->next->value};
+        return {(*order)->next->key, (*order)->next->value};
     }
     std::pair<K const &, V &> back() {
-        return {order->prev->key, order->prev->value};
+        copy_on_write();
+        can_be_modified = true;
+        return {(*order)->prev->key, (*order)->prev->value};
     }
     std::pair<K const &, V const &> back() const {
-        return {order->prev->key, order->prev->value};
+        return {(*order)->prev->key, (*order)->prev->value};
     }
 
     //- Metody first i last zwracają odpowiednio pierwszą i ostatnią parę
@@ -191,19 +287,24 @@ public:
     //Złożoność O(log n).
 
     std::pair<K const &, V &> first(K const &key) {
-        k_list * a = tree.at(key).front();
+        copy_on_write();
+        can_be_modified = true;
+        k_node * a = tree->at(key).front();
+
         return {a->key, a->value};
     }
     std::pair<K const &, V const &> first(K const &key) const {
-        k_list * a = tree.at(key).front();
+        k_node * a = tree->at(key).front();
         return {a->key, a->value};
     }
     std::pair<K const &, V &> last(K const &key) {
-        k_list * a = tree.at(key).back();
+        copy_on_write();
+        can_be_modified = true;
+        k_node * a = tree->at(key).back();
         return {a->key, a->value};
     }
     std::pair<K const &, V const &> last(K const &key) const {
-        k_list * a = tree.at(key).back();
+        k_node * a = tree->at(key).back();
         return {a->key, a->value};
     }
     //
@@ -215,32 +316,46 @@ public:
     //- Metoda empty zwraca true, gdy kolejka jest pusta, a false w przeciwnym
     //przypadku. Złożoność O(1).
     bool empty() const {
-        return this->size() == 0;
+        return length == 0;
     }
 
     //- Metoda count zwraca liczbę elementów w kolejce o podanym kluczu.
     //Złożoność O(log n).
     size_t count(K const & key) const {
         //check if element is in the tree.
-        return tree.at(key).size();
+        if(tree->find(key) == tree->end()) {
+            return 0;
+        }
+        return tree->at(key).size();
     }
 
     //- Metoda clear usuwa wszystkie elementy z kolejki. Złożoność O(n).
     void clear() {
-        for (auto  l : tree) {
+        for (auto  l : *tree) {
             for(auto o : l) {
                 order_remove(o);
             }
         }
-        tree.clear();
+        tree->clear();
         length = 0;
     }
 
     void print_queue() {
-        while(!empty()) {
-            std::cout << "key=" << front().first << " val=" << front().second << std::endl;
-            pop();
+        std::cout << "currently watching: " << tree.use_count() << std::endl;
+        std::cout << "Dict print: " << std::endl;
+        for (auto it = (*tree).begin(); it != (*tree).end(); ++it) {
+            std::cout << it->first << " vals: ";
+            for (auto it1: it->second) {
+                std::cout << it1->value << " ";
+            }
         }
+        std::cout << "\nQueue print: " << std::endl;
+        auto * tmp = (*order)->next;
+        for(int i = 0 ; i < length; i++) {
+            std::cout << "key=" << tmp->key << " val=" << tmp->value << std::endl;
+            tmp = tmp->next;
+        }
+        std::cout << std::endl;
     }
 
 
@@ -308,11 +423,11 @@ public:
     };
 
     k_iterator k_begin() const noexcept {
-        return k_iterator(tree.begin());
+        return k_iterator(tree->begin());
     }
 
     k_iterator k_end() const noexcept {
-        return k_iterator(tree.end());
+        return k_iterator(tree->end());
     }
 
     //

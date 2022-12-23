@@ -1,5 +1,5 @@
-
-
+//
+//
 #include "kvfifo.h"
 #include <cassert>
 #include <memory>
@@ -60,32 +60,15 @@ int main() {
     kvf5.reset();
     assert(kvf6.front().first == 4 && kvf6.front().second == 0);
 
-    std::swap(kvf1, kvf2);
+    kvf1.print_queue();
+    kvf2.print_queue();
+
+//    std::swap(kvf1, kvf2);
     std::vector<kvfifo<int, int>> vec;
     for (int i = 0; i < 100000; i++)
         kvf1.push(i, i);
-    for (int i = 0; i < 1000000; i++)
+    for (int i = 0; i < 100000; i++)
         vec.push_back(kvf1);  // Wszystkie obiekty w vec wspĂłĹdzielÄ dane.
 }
 
 
-//
-//int main() {
-//    kvfifo<int, int> kvf1;
-//    kvf1.push(1, 1);
-//    kvf1.push(1, 2);
-//    kvf1.push(1, 3);
-//    kvf1.push(100, 4);
-//    kvf1.push(100, 5);
-//    kvf1.push(100, 6);
-//
-////    kvf1.pop(100);
-////    kvf1.pop();
-////    auto b = kvf1.front();
-////    b.second = 3;
-//    kvf1.move_to_back(1);
-//    kvf1.print_queue();
-////    auto a = kvf1.front();
-////    std::cout << a.first <<" " << a.second << std::endl;
-//
-//}
