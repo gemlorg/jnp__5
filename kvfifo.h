@@ -76,8 +76,8 @@ public:
 
     kvfifo() {
         length = 0;
-        V v;
-        K k;
+        V v = 0;
+        K k = 0;
         k_node * p = new k_node(v, k);
         order = std::make_shared<k_node *>(p);
         tree = std::make_shared<dict>(dict{});
@@ -97,19 +97,19 @@ public:
         tree = other.tree;
         order = other.order;
         other.length = 0;
-        other.tree = nullptr;
-        other.order = nullptr;
+        other.tree = std::make_shared<dict>(dict{});
+        other.order = std::make_shared<k_node * >(new k_node(0, 0));
     }
 
 
     //- Operator przypisania przyjmujący argument przez wartość. Złożoność O(1) plus
     //        czas niszczenia nadpisywanego obiektu.
     kvfifo& operator=( kvfifo other) {
-        std::cout << "other is: " << other.length;
+//        std::cout << "other is: " << other.length;
         if(this != &other) {
 
-            struct k_node* head = (*order)->next;
-            struct k_node* tmp ;
+             k_node * head = (*order)->next;
+            k_node * tmp ;
             while (length > 0) {
                 tmp = head;
                 head = head->next;
@@ -128,9 +128,7 @@ public:
         }
         return *this;
     }
-    V& operator=( V  other) {
-        copy_on_write();
-    }
+
 
 
     //- Metoda push wstawia wartość v na koniec kolejki, nadając jej klucz k.
@@ -148,7 +146,6 @@ public:
         } else {
             tree->insert({k, {o}});
         }
-//        std::cout << tree->at(k).back()->value << std::endl;
 
         length++;
 
@@ -374,7 +371,7 @@ public:
       //k_iterator_t key_iterator;
 
     public:
-      using iterator_category = std::bidirectional_iterator_tag;;
+      using iterator_category = std::bidirectional_iterator_tag;
       using value_type = K;
     	using difference_type = ptrdiff_t;
     	using pointer = value_type*;

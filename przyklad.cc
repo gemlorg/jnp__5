@@ -1,5 +1,3 @@
-//
-//
 #include "kvfifo.h"
 #include <cassert>
 #include <memory>
@@ -19,7 +17,7 @@ int main() {
 
     auto &ref = kvf1.front().second;
 
-    kvfifo<int, int> kvf2(kvf1); // Wykonuje siÄ peĹna kopia, dlaczego?
+    kvfifo<int, int> kvf2(kvf1); // Wykonuje siÄ™ peÅ‚na kopia, dlaczego?
     kvfifo<int, int> kvf3;
     kvf3 = kvf2;
 
@@ -27,7 +25,7 @@ int main() {
     assert(kvf1.front().second == 10);
     assert(kvf2.front().second != 10);
 
-    kvf2.pop(); // Obiekt kvf2 dokonuje kopii i przestaje wspĂłĹdzieliÄ dane z kvf3.
+    kvf2.pop(); // Obiekt kvf2 dokonuje kopii i przestaje wspÃ³Å‚dzieliÄ‡ dane z kvf3.
     assert(kvf2.size() == 2);
     assert(kvf2.count(3) == 0);
     assert(kvf2.count(2) == 1);
@@ -60,15 +58,10 @@ int main() {
     kvf5.reset();
     assert(kvf6.front().first == 4 && kvf6.front().second == 0);
 
-    kvf1.print_queue();
-    kvf2.print_queue();
-
-//    std::swap(kvf1, kvf2);
+    std::swap(kvf1, kvf2);
     std::vector<kvfifo<int, int>> vec;
     for (int i = 0; i < 100000; i++)
         kvf1.push(i, i);
-    for (int i = 0; i < 100000; i++)
-        vec.push_back(kvf1);  // Wszystkie obiekty w vec wspĂłĹdzielÄ dane.
+    for (int i = 0; i < 1000000; i++)
+        vec.push_back(kvf1);  // Wszystkie obiekty w vec wspÃ³Å‚dzielÄ… dane.
 }
-
-
