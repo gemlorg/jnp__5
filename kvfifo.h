@@ -6,35 +6,7 @@
 #include <memory>
 
 
-//Celem tego zadania jest zaimplementowanie wzorca kontenera zachowującego
-//się jak kolejka fifo, w której każdy element ma przyporządkowany klucz.
-//Kontener ten powinien zapewniać silne gwarancje odporności na wyjątki oraz
-//realizować semantykę kopiowania przy modyfikowaniu (ang. copy on write).
-
-
-
-//Kopiowanie przy zapisie to technika optymalizacji szeroko stosowana
-//m.in. w strukturach danych z biblioteki Qt oraz dawniej w implementacjach
-//std::string. Podstawowa jej idea jest taka, że gdy tworzymy kopię obiektu
-//(w C++ za pomocą konstruktora kopiującego lub operator przypisania), to
-//        współdzieli ona wszystkie wewnętrzne zasoby (które mogą być przechowywane
-//        w oddzielnym obiekcie na stercie) z obiektem źródłowym. Taki stan trwa do
-//momentu, w którym jedna z kopii musi zostać zmodyfikowana. Wtedy modyfikowany
-//obiekt tworzy własną kopię owych zasobów, na których wykonuje modyfikacje.
-//
-//Wzorzec ma być parametryzowany typami klucza i przechowywanej wartości,
-//oznaczanymi odpowiednio przez K i V. Typ klucza K ma semantykę wartości, czyli
-//dostępne są dla niego bezparametrowy konstruktor domyślny, konstruktor
-//        kopiujący, konstruktor przenoszący i operatory przypisania. Na typie K
-//        zdefiniowany jest porządek liniowy i można na obiektach tego typu wykonywać
-//wszelkie porównania. O typie V można jedynie założyć, że ma konstruktor
-//kopiujący.
-//
-//W ramach tego zadania należy zaimplementować szablon
-//
-
 template <typename K, typename V> class kvfifo {
-
     class k_node {
     public:
         k_node * prev;
@@ -44,6 +16,15 @@ template <typename K, typename V> class kvfifo {
         k_node(K key, V value) : key(key), value(value) {
             prev = this;
             next = this;
+        }
+        ~k_node() {
+            k_node * head = this->next;
+            k_node * tmp ;
+            while(head != this) {
+                tmp = head;
+                head = head->next;
+                delete tmp;
+            }
         }
     };
 private:
@@ -57,21 +38,9 @@ private:
     //a key-value map. for each key we save all values assigned to this key in a list.
     //this allows quick search for elements by the key.
     std::shared_ptr<dict> tree;
+
     bool can_be_modified;
-
 public:
-
-    //Klasa kvfifo powinna udostępniać niżej opisane operacje. Przy każdej operacji
-    //        podana jest jej oczekiwana złożoność czasowa przy założeniu, że nie trzeba
-    //        wykonywać kopii. Oczekiwana złożoność czasowa operacji kopiowania przy zapisie
-    //        wynosi O(n log n), gdzie n oznacza liczbę elementów przechowywanych w kolejce.
-    //Wszystkie operacje muszą zapewniać co najmniej silną odporność na wyjątki,
-    //        a konstruktor przenoszący i destruktor muszą być no-throw.
-
-
-    //- Konstruktory: bezparametrowy tworzący pustą kolejkę, kopiujący i przenoszący.
-    //Złożoność O(1).
-
     kvfifo() {
         length = 0;
         V v = 0;
@@ -98,12 +67,14 @@ public:
         other.tree = std::make_shared<dict>(dict{});
         other.order = std::make_shared<k_node * >(new k_node(0, 0));
     }
+    ~kvfifo() {
+
+    }
 
 
     //- Operator przypisania przyjmujący argument przez wartość. Złożoność O(1) plus
     //        czas niszczenia nadpisywanego obiektu.
     kvfifo& operator=( kvfifo other) {
-//        std::cout << "other is: " << other.length;
         if(this != &other) {
 
              k_node * head = (*order)->next;
@@ -115,7 +86,6 @@ public:
                 delete tmp;
             }
             delete head;
-//            std::cout << other.size();
             length = other.size();
             tree = other.tree;
             order = other.order;
@@ -381,9 +351,10 @@ public:
 
     //- Metoda clear usuwa wszystkie elementy z kolejki. Złożoność O(n).
     void clear() noexcept {
-        for (auto  l : *tree) {
-            for(auto o : l) {
-                order_remove(o);
+        copy_on_write();
+        for (auto it = (*tree).begin(); it != (*tree).end(); ++it) {
+            for (auto it1: it->second) {
+                order_remove(it1);
             }
         }
         tree->clear();
@@ -473,10 +444,12 @@ public:
     };
 
     k_iterator k_begin() const noexcept {
+//        if(empty()) return std::empty;
         return k_iterator(tree->begin());
     }
 
     k_iterator k_end() const noexcept {
+//        if(empty()) return std::empty;
         return k_iterator(tree->end());
     }
 
